@@ -7,7 +7,7 @@ from textual.binding import Binding
 from textual.containers import Vertical
 from textual.widgets import DataTable, Input, Static
 
-from ..hf_client import ModelHit, search_models
+from ..hf_client import ModelHit, hit_verdict, search_models
 from ..screens.model_detail import ModelDetailScreen
 
 
@@ -28,7 +28,7 @@ class SearchView(Vertical):
 
     def on_mount(self) -> None:
         table = self.query_one("#search-table", DataTable)
-        for column in ("model", "quant", "downloads", "likes", "gated"):
+        for column in ("model", "vllm", "quant", "downloads", "likes", "gated"):
             table.add_column(column)
 
     @on(Input.Submitted, "#search-input")
@@ -56,9 +56,11 @@ class SearchView(Vertical):
         table = self.query_one("#search-table", DataTable)
         table.clear()
         for hit in hits:
-            table.add_row(hit.id, hit.quantization or "-", f"{hit.downloads:,}",
-                          str(hit.likes), "yes" if hit.gated else "")
-        note = f"{len(hits)} result(s) • Enter on a row for files and download"
+            table.add_row(hit.id, hit_verdict(hit), hit.quantization or "-",
+                          f"{hit.downloads:,}", str(hit.likes),
+                          "yes" if hit.gated else "")
+        note = (f"{len(hits)} result(s) • vllm: ✓ supported, ? transformers with "
+                f"unknown arch (newer vLLM may run it), no = unloadable • Enter for detail")
         if not hits:
             note = "no results"
         self.query_one("#search-note", Static).update(note)

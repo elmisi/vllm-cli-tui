@@ -34,6 +34,8 @@ class ModelHit:
     likes: int = 0
     gated: bool = False
     quantization: str = ""
+    architecture: str = ""
+    library: str = ""
 
 
 @dataclass(frozen=True)
@@ -48,6 +50,55 @@ class ModelDetail:
     gated: bool = False
     files: tuple[ModelFile, ...] = ()
     total_bytes: int = 0
+
+
+# Architectures known to vLLM's model registry. A snapshot, deliberately:
+# the live list changes with every vLLM release and cannot be queried from a
+# server. An architecture missing here shows as "?", never as "no" — the
+# certain noes come from the repo's format, not from this list.
+SUPPORTED_ARCHITECTURES: frozenset[str] = frozenset({
+    # text generation
+    "ArcticForCausalLM", "BaichuanForCausalLM", "BloomForCausalLM",
+    "ChatGLMModel", "ChatGLMForConditionalGeneration",
+    "CohereForCausalLM", "Cohere2ForCausalLM", "DbrxForCausalLM",
+    "DeciLMForCausalLM", "DeepseekForCausalLM", "DeepseekV2ForCausalLM",
+    "DeepseekV3ForCausalLM", "ExaoneForCausalLM", "FalconForCausalLM",
+    "GemmaForCausalLM", "Gemma2ForCausalLM", "Gemma3ForCausalLM",
+    "GlmForCausalLM", "Glm4ForCausalLM", "GPT2LMHeadModel",
+    "GPTBigCodeForCausalLM", "GPTJForCausalLM", "GPTNeoXForCausalLM",
+    "GraniteForCausalLM", "GraniteMoeForCausalLM", "InternLM2ForCausalLM",
+    "JambaForCausalLM", "LlamaForCausalLM", "MambaForCausalLM",
+    "Mamba2ForCausalLM", "MiniCPMForCausalLM", "MiniCPM3ForCausalLM",
+    "MistralForCausalLM", "MixtralForCausalLM", "MPTForCausalLM",
+    "NemotronForCausalLM", "OlmoForCausalLM", "Olmo2ForCausalLM",
+    "OlmoeForCausalLM", "OPTForCausalLM", "PersimmonForCausalLM",
+    "PhiForCausalLM", "Phi3ForCausalLM", "PhiMoEForCausalLM",
+    "Qwen2ForCausalLM", "Qwen2MoeForCausalLM", "Qwen3ForCausalLM",
+    "Qwen3MoeForCausalLM", "Qwen3NextForCausalLM", "SolarForCausalLM",
+    "StableLmForCausalLM", "Starcoder2ForCausalLM", "XverseForCausalLM",
+    # multimodal generation
+    "Gemma3ForConditionalGeneration", "Idefics3ForConditionalGeneration",
+    "InternVLChatModel", "LlavaForConditionalGeneration",
+    "LlavaNextForConditionalGeneration", "MiniCPMV",
+    "Mistral3ForConditionalGeneration", "MllamaForConditionalGeneration",
+    "PaliGemmaForConditionalGeneration", "Phi3VForCausalLM",
+    "PixtralForConditionalGeneration", "Qwen2VLForConditionalGeneration",
+    "Qwen2_5_VLForConditionalGeneration", "Qwen3VLForConditionalGeneration",
+    # seen serving live on vLLM 0.21
+    "Qwen3_5ForConditionalGeneration", "Qwen3_5ForCausalLM",
+})
+
+
+def hit_verdict(hit: ModelHit) -> str:
+    """One cell of truth per search row: ✓ known, ? plausible, no (why)."""
+    if hit.architecture:
+        marker = "✓" if hit.architecture in SUPPORTED_ARCHITECTURES else "?"
+        return f"{marker} {hit.architecture}"
+    if hit.library == "peft":
+        return "no (adapter)"
+    if hit.quantization == "GGUF":
+        return "no (GGUF)"
+    return "no (no config)"
 
 
 def infer_quantization(model_id: str, tags: list[str]) -> str:
@@ -66,6 +117,8 @@ def parse_search_results(payload: Any) -> list[ModelHit]:
         if not isinstance(entry, dict) or not entry.get("id"):
             continue
         tags = [t for t in entry.get("tags") or [] if isinstance(t, str)]
+        config = entry.get("config") or {}
+        architectures = config.get("architectures") or [] if isinstance(config, dict) else []
         hits.append(
             ModelHit(
                 id=str(entry["id"]),
@@ -74,6 +127,8 @@ def parse_search_results(payload: Any) -> list[ModelHit]:
                 # the API returns False, True or "auto"; anything not False is gated
                 gated=bool(entry.get("gated")),
                 quantization=infer_quantization(str(entry["id"]), tags),
+                architecture=str(architectures[0]) if architectures else "",
+                library=str(entry.get("library_name") or ""),
             )
         )
     return hits
@@ -159,11 +214,18 @@ def search_models(query: str, *, limit: int = 50, timeout_s: float = 10.0) -> li
     params = urlencode({
         "search": query,
         "pipeline_tag": "text-generation",
-        "sort": "downloads",
-        "direction": "-1",
         "limit": str(limit),
     })
-    return parse_search_results(_get_json(f"{HF_API}/models?{params}", timeout_s=timeout_s))
+    # expand[] delivers config.architectures for every row in this same
+    # request — the per-row verdict costs zero extra round trips. The API
+    # rejects expand combined with sort, so results are re-sorted client-side.
+    expand = "&".join(f"expand[]={field}" for field in
+                      ("config", "library_name", "tags", "downloads", "likes", "gated"))
+    hits = parse_search_results(
+        _get_json(f"{HF_API}/models?{params}&{expand}", timeout_s=timeout_s)
+    )
+    hits.sort(key=lambda h: -h.downloads)
+    return hits
 
 
 def fetch_model_detail(model_id: str, *, timeout_s: float = 10.0) -> ModelDetail:

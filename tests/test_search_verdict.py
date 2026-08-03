@@ -59,3 +59,11 @@ def test_the_arch_seen_live_on_a_real_server_is_in_the_snapshot():
     hit = ModelHit(id="x", architecture="Qwen3_5ForConditionalGeneration",
                    library="transformers")
     assert hit_verdict(hit).startswith("✓")
+
+
+def test_mlx_repos_are_a_certain_no_despite_their_valid_architecture():
+    """MLX repos carry a correct transformers config, but the weights are in
+    Apple's MLX format — found in the field: they showed as ✓."""
+    hit = ModelHit(id="mlx-community/Qwen3.5-9B-4bit", library="mlx",
+                   architecture="Qwen3_5ForConditionalGeneration")
+    assert hit_verdict(hit) == "no (MLX)"

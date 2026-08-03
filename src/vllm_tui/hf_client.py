@@ -91,6 +91,10 @@ SUPPORTED_ARCHITECTURES: frozenset[str] = frozenset({
 
 def hit_verdict(hit: ModelHit) -> str:
     """One cell of truth per search row: ✓ known, ? plausible, no (why)."""
+    if hit.library == "mlx":
+        # MLX repos carry a valid transformers config, but the weights are in
+        # Apple's format: the architecture check alone would say yes.
+        return "no (MLX)"
     if hit.architecture:
         marker = "✓" if hit.architecture in SUPPORTED_ARCHITECTURES else "?"
         return f"{marker} {hit.architecture}"

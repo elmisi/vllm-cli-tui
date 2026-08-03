@@ -6,9 +6,16 @@ are plain filesystem work: one subdirectory = one model.
 """
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass(frozen=True)
+class Serveability:
+    serveable: bool
+    detail: str  # the architecture when serveable, the reason when not
 
 
 @dataclass(frozen=True)
@@ -18,10 +25,54 @@ class LocalModel:
     source: str          # "hf-cache" or the extra dir it came from
     path: str = ""       # filesystem path when directly deletable
     last_used: str = ""
+    serveable: bool = False
+    detail: str = ""
 
     @property
     def deletable(self) -> bool:
         return bool(self.path)
+
+
+def probe_dir_serveability(path: Path) -> Serveability:
+    """Can vLLM load what is in this directory? Decided from the files.
+
+    "Serveable" here means "in a format vLLM loads": a transformers repo with
+    a config naming its architecture and full weights. Whether the specific
+    architecture is supported by the installed vLLM release cannot be known
+    offline — but diffusers trees, GGUF-only and adapter-only repos are
+    certain noes, and that is what this filter is for.
+    """
+    try:
+        names = [p.name for p in path.iterdir()]
+    except OSError:
+        return Serveability(False, "unreadable")
+
+    if "model_index.json" in names:
+        return Serveability(False, "diffusers")
+
+    def is_full_weight(name: str) -> bool:
+        if name.startswith("adapter"):
+            return False
+        return name.endswith(".safetensors") or (name.endswith(".bin") and "model" in name)
+
+    has_full = any(is_full_weight(n) for n in names)
+    has_gguf = any(n.endswith(".gguf") for n in names)
+
+    if "adapter_config.json" in names and not has_full:
+        return Serveability(False, "adapter-only")
+    if "config.json" not in names:
+        return Serveability(False, "GGUF" if has_gguf and not has_full else "no config.json")
+
+    try:
+        config = json.loads((path / "config.json").read_text(encoding="utf-8"))
+        architectures = config.get("architectures") or []
+    except Exception:
+        architectures = []
+    if not architectures:
+        return Serveability(False, "no architectures")
+    if not has_full:
+        return Serveability(False, "no weights")
+    return Serveability(True, str(architectures[0]))
 
 
 def scan_extra_dirs(dirs: list[str]) -> list[LocalModel]:
@@ -40,8 +91,10 @@ def scan_extra_dirs(dirs: list[str]) -> list[LocalModel]:
                         size += f.stat().st_size
             except OSError:
                 pass
+            probe = probe_dir_serveability(child)
             models.append(LocalModel(name=child.name, size_bytes=size,
-                                     source=str(root), path=str(child)))
+                                     source=str(root), path=str(child),
+                                     serveable=probe.serveable, detail=probe.detail))
     models.sort(key=lambda m: -m.size_bytes)
     return models
 
@@ -54,16 +107,24 @@ def scan_hf_cache() -> list[LocalModel]:
         info = scan_cache_dir()
     except Exception:
         return []
-    models = [
-        LocalModel(
-            name=repo.repo_id,
-            size_bytes=repo.size_on_disk,
-            source="hf-cache",
-            last_used=repo.last_accessed_str or "",
+    models = []
+    for repo in info.repos:
+        if repo.repo_type != "model":
+            continue
+        probe = Serveability(False, "no snapshot")
+        revisions = sorted(repo.revisions, key=lambda r: r.last_modified or 0)
+        if revisions:
+            probe = probe_dir_serveability(Path(revisions[-1].snapshot_path))
+        models.append(
+            LocalModel(
+                name=repo.repo_id,
+                size_bytes=repo.size_on_disk,
+                source="hf-cache",
+                last_used=repo.last_accessed_str or "",
+                serveable=probe.serveable,
+                detail=probe.detail,
+            )
         )
-        for repo in info.repos
-        if repo.repo_type == "model"
-    ]
     models.sort(key=lambda m: -m.size_bytes)
     return models
 

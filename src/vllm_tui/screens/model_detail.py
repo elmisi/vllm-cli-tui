@@ -7,7 +7,14 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Static
 
-from ..hf_client import ModelDetail, ModelHit, fetch_model_detail, format_size
+from ..hf_client import (
+    ModelDetail,
+    ModelHit,
+    detail_flags,
+    fetch_architectures,
+    fetch_model_detail,
+    format_size,
+)
 from .download_progress import DownloadProgressScreen
 
 
@@ -43,15 +50,22 @@ class ModelDetailScreen(ModalScreen[None]):
                 f"could not load: {type(exc).__name__}",
             )
             return
-        self.app.call_from_thread(self._show_detail, detail)
+        architecture = fetch_architectures(self._hit.id)
+        self.app.call_from_thread(self._show_detail, detail, architecture)
 
-    def _show_detail(self, detail: ModelDetail) -> None:
+    def _show_detail(self, detail: ModelDetail, architecture: str) -> None:
         self._detail = detail
         table = self.query_one("#detail-table", DataTable)
         table.clear()
         for f in detail.files:
             table.add_row(f.name, format_size(f.size) if f.size else "-")
-        note = f"{len(detail.files)} files • {format_size(detail.total_bytes)} total • d to download • Esc to close"
+        note = f"{len(detail.files)} files • {format_size(detail.total_bytes)} total"
+        if architecture:
+            note += f" • {architecture}"
+        flags = detail_flags(detail.files)
+        if flags:
+            note += f" • ⚠ {flags}"
+        note += " • d to download • Esc to close"
         if self._hit.gated:
             note += " • GATED: needs an accepted license and a logged-in HF token"
         self.query_one("#detail-note", Static).update(note)

@@ -15,12 +15,17 @@ class ModelsView(Vertical):
     BINDINGS = [
         Binding("r", "refresh", "Refresh"),
         Binding("d", "delete", "Delete"),
+        Binding("a", "toggle_all", "All / serveable"),
     ]
 
     def __init__(self, *, extra_dirs: list[str]) -> None:
         super().__init__()
         self._extra_dirs = extra_dirs
+        self._all_models: list[LocalModel] = []
         self._models: list[LocalModel] = []
+        # The tab answers "what can I serve" by default; `a` widens it to
+        # "what is eating my disk", which needs the unserveable ones too.
+        self._only_serveable = True
 
     def compose(self) -> ComposeResult:
         yield Static("", id="models-note", markup=False)
@@ -28,7 +33,7 @@ class ModelsView(Vertical):
 
     def on_mount(self) -> None:
         table = self.query_one("#models-table", DataTable)
-        for column in ("model", "size", "source", "last used"):
+        for column in ("model", "size", "vllm", "source", "last used"):
             table.add_column(column)
         self.action_refresh()
 
@@ -40,17 +45,29 @@ class ModelsView(Vertical):
         self.app.call_from_thread(self._show_models, models)
 
     def _show_models(self, models: list[LocalModel]) -> None:
-        self._models = models
+        self._all_models = models
+        shown = [m for m in models if m.serveable] if self._only_serveable else models
+        self._models = shown
         table = self.query_one("#models-table", DataTable)
         table.clear()
         total = 0
-        for model in models:
+        for model in shown:
             total += model.size_bytes
             table.add_row(model.name, format_size(model.size_bytes),
+                          model.detail if model.serveable else f"no ({model.detail})",
                           model.source, model.last_used or "-")
-        self.query_one("#models-note", Static).update(
-            f"{len(models)} model(s) on disk • {format_size(total)} total • d to delete"
-        )
+        if self._only_serveable:
+            hidden = len(models) - len(shown)
+            note = (f"{len(shown)} serveable model(s) • {format_size(total)} • "
+                    f"{hidden} hidden • a to show all • d to delete")
+        else:
+            note = (f"{len(shown)} model(s) on disk • {format_size(total)} total • "
+                    f"a to show serveable only • d to delete")
+        self.query_one("#models-note", Static).update(note)
+
+    def action_toggle_all(self) -> None:
+        self._only_serveable = not self._only_serveable
+        self._show_models(self._all_models)
 
     def action_delete(self) -> None:
         table = self.query_one("#models-table", DataTable)

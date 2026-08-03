@@ -102,6 +102,41 @@ def parse_model_detail(payload: Any) -> ModelDetail:
     )
 
 
+def detail_flags(files: tuple[ModelFile, ...]) -> str:
+    """Certain noes, visible before any bytes move.
+
+    The Hub cannot tell us whether the installed vLLM release supports an
+    architecture, but a repo whose files are GGUF-only, adapter-only or
+    config-less is unloadable for sure — worth saying next to the price tag.
+    """
+    names = [f.name for f in files]
+    full = [n for n in names
+            if not n.startswith("adapter")
+            and (n.endswith(".safetensors") or (n.endswith(".bin") and "model" in n))]
+    gguf = [n for n in names if n.endswith(".gguf")]
+    flags: list[str] = []
+    if gguf and not full:
+        flags.append("GGUF-only: vLLM's GGUF support is limited")
+    elif "adapter_config.json" in names and not full:
+        flags.append("adapter-only: needs its base model, not serveable alone")
+    elif "config.json" not in names:
+        flags.append("no config.json: not a transformers repo")
+    return " • ".join(flags)
+
+
+def fetch_architectures(model_id: str, *, timeout_s: float = 10.0) -> str:
+    """The architectures field of the repo's config.json; "" when unknowable."""
+    url = f"https://huggingface.co/{quote(model_id, safe='/')}/raw/main/config.json"
+    try:
+        request = Request(url, headers={"User-Agent": "vllm-cli-tui"})
+        with urlopen(request, timeout=timeout_s) as resp:
+            config = json.loads(resp.read().decode("utf-8", errors="replace"))
+        architectures = config.get("architectures") or []
+        return str(architectures[0]) if architectures else ""
+    except Exception:
+        return ""
+
+
 def format_size(size: int) -> str:
     """Decimal units, like the Hub itself displays them."""
     value = float(size)

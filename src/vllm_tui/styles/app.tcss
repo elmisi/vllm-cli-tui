@@ -1,0 +1,35 @@
+#monitor-note, #models-note, #search-note {
+    height: auto;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+#confirm-box, #download-box {
+    width: 70;
+    height: auto;
+    border: round $accent;
+    background: $panel;
+    padding: 1 2;
+    align: center middle;
+}
+
+#detail-box {
+    width: 90%;
+    height: 80%;
+    border: round $accent;
+    background: $panel;
+    padding: 1 2;
+}
+
+#detail-table {
+    height: 1fr;
+}
+
+#confirm-hint {
+    color: $text-muted;
+    padding: 1 0 0 0;
+}
+
+ConfirmDialog, ModelDetailScreen, DownloadProgressScreen {
+    align: center middle;
+}

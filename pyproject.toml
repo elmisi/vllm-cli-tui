@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vllm-cli-tui"
+version = "0.1.0"
+description = "A TUI companion for vLLM: find and download models, watch your servers"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "elmisi" }
+]
+keywords = ["vllm", "llm", "tui", "terminal", "ai", "models", "huggingface"]
+dependencies = [
+    "textual>=0.50.0",
+    "huggingface_hub>=0.20.0",
+]
+
+[project.scripts]
+vllm-tui = "vllm_tui.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vllm_tui"]

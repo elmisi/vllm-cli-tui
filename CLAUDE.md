@@ -18,6 +18,7 @@ belongs to the host's own tooling. Search/download/observe only.
 ```bash
 ./run.py                                   # run from source
 PYTHONPATH=src .venv/bin/python -m pytest tests/ -v   # test suite
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_hf_client.py -k quant -v   # one file / one test
 ./run.py --version
 ```
 
@@ -45,6 +46,24 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/ -v   # test suite
   because it scribbles on the Textual screen
 - vLLM metric names differ between engine versions: prefer
   `vllm:kv_cache_usage_perc`, fall back to `vllm:gpu_cache_usage_perc`
+
+### Serveability (can vLLM load this?)
+
+Three checks, one principle: **certain noes come from the repo's format;
+architecture support is only ever "✓ known" or "? unknown", never "no"** —
+`SUPPORTED_ARCHITECTURES` in `hf_client.py` is a deliberate snapshot of vLLM's
+registry (unqueryable live), so an absent entry means "?", and the list needs
+occasional additions as vLLM releases.
+
+- Search rows: `hit_verdict()` — architectures arrive in the search response
+  itself via the Hub's `expand[]` params (zero extra round trips), but the API
+  rejects `expand` combined with `sort`, so results are re-sorted client-side.
+  MLX repos carry a valid transformers config yet Apple-format weights: the
+  library check must run before the architecture check.
+- Search detail: `detail_flags()` — GGUF-only / adapter-only / config-less
+  flags from the file list, shown before any bytes move.
+- Local disk: `probe_dir_serveability()` in `local_models.py` — same idea from
+  files on disk; Models tab hides non-serveable entries by default.
 
 ### Testing
 

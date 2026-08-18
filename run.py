@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 # Add src to path for development
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from vllm_tui.app import main
 

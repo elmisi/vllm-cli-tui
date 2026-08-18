@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Launcher: runs the TUI with the project's venv if present, system python otherwise.
+here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+python="$here/.venv/bin/python"
+[ -x "$python" ] || python=python3
+exec "$python" "$here/run.py" "$@"

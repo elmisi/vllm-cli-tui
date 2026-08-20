@@ -7,8 +7,10 @@ from textual.containers import Vertical
 from textual.widgets import DataTable, Static
 
 from ..hf_client import format_size
+from ..lifecycle import plan_for_model
 from ..local_models import LocalModel, delete_local_model, scan_extra_dirs, scan_hf_cache
 from ..screens.confirm_dialog import ConfirmDialog
+from ..screens.serve_plan import ServePlanScreen
 
 
 class ModelsView(Vertical):
@@ -16,6 +18,7 @@ class ModelsView(Vertical):
         Binding("r", "refresh", "Refresh"),
         Binding("d", "delete", "Delete"),
         Binding("a", "toggle_all", "All / serveable"),
+        Binding("s", "serve_plan", "Serve plan"),
     ]
 
     def __init__(self, *, extra_dirs: list[str]) -> None:
@@ -59,15 +62,26 @@ class ModelsView(Vertical):
         if self._only_serveable:
             hidden = len(models) - len(shown)
             note = (f"{len(shown)} serveable model(s) • {format_size(total)} • "
-                    f"{hidden} hidden • a to show all • d to delete")
+                    f"{hidden} hidden • a to show all • s for serve plan • d to delete")
         else:
             note = (f"{len(shown)} model(s) on disk • {format_size(total)} total • "
-                    f"a to show serveable only • d to delete")
+                    f"a to show serveable only • s for serve plan • d to delete")
         self.query_one("#models-note", Static).update(note)
 
     def action_toggle_all(self) -> None:
         self._only_serveable = not self._only_serveable
         self._show_models(self._all_models)
+
+    def action_serve_plan(self) -> None:
+        """Read-only preview of the exact `vllm serve` command for the row."""
+        table = self.query_one("#models-table", DataTable)
+        row = table.cursor_row
+        if row is None or row < 0 or row >= len(self._models):
+            return
+        model = self._models[row]
+        endpoints = self.app.config.endpoints
+        endpoint = endpoints[0] if endpoints else "http://localhost:8000"
+        self.app.push_screen(ServePlanScreen(plan_for_model(model, endpoint)))
 
     def action_delete(self) -> None:
         table = self.query_one("#models-table", DataTable)

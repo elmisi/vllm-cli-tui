@@ -25,6 +25,10 @@ tooling. Owning that would duplicate infrastructure the box already has; showing
 what is *running* is the Monitor tab's job, controlling it is not. This is the
 main scope difference from tools like `llmserve`, which is a launcher.
 
+The one step toward control that is already in: the **serve plan** (step 1 of
+the lifecycle roadmap, below). It is read-only — it shows the exact command and
+what would go wrong, then stops there.
+
 ## The three tabs
 
 ### 1. Search — find and download models
@@ -52,6 +56,20 @@ main scope difference from tools like `llmserve`, which is a launcher.
   a custom folder): one entry per subdirectory, with recursive size.
 - Delete with confirmation. Cache entries are deleted through the scan result's
   revision API; extra-dir entries with `shutil.rmtree`.
+- `s` opens the **serve plan** for the selected row (`lifecycle.py`): the exact
+  `vllm serve <repo-id-or-path> --port N [--max-model-len M]` command, plus
+  pre-flight checks — serveability (reused from the scan), size on disk, vllm
+  binary on PATH (fallback `python -m vllm`), port availability (bind test),
+  VRAM headroom (weights ×1.25 vs `nvidia-smi` free). Read-only by design.
+
+### Lifecycle roadmap (behind the `lifecycle` config, default `off`)
+
+1. **Serve plan preview** — done, read-only (above).
+2. **`systemd` mode** — the TUI generates and drives user units / `systemd-run`
+   transient scopes: the host supervisor stays the owner of the process.
+3. **`direct` mode** — the TUI spawns `vllm serve` itself (setsid, state file,
+   SIGTERM-with-drain via `/pause`, adoption of foreign servers), for hosts without
+   systemd.
 
 ### 3. Monitor — what the servers are doing
 
@@ -81,8 +99,8 @@ cache, everything else is config.
 
 Cloned from ollama-cli-tui: `run.py` dev entry point → `src/vllm_tui/app.py`
 (Textual app, tabs 1/2/3) → `widgets/` (one view per tab) → `screens/` (modal
-dialogs: confirm, model detail, download progress). All network and disk work in
-`hf_client.py`, `local_models.py`, `metrics_client.py`, `config.py` — pure
+dialogs: confirm, model detail, download progress, serve plan). All network and disk work in
+`hf_client.py`, `local_models.py`, `metrics_client.py`, `config.py`, `lifecycle.py` — pure
 "data in / data out" modules with no Textual imports, so they are unit-testable.
 Workers keep the event loop free; UI updates via messages.
 

@@ -20,6 +20,9 @@ vLLM (typically over SSH).
 What it deliberately does **not** do: start or stop vLLM servers. Process
 lifecycle belongs to whatever your host already uses (systemd, containers,
 site tooling); this tool observes and provisions, it does not supervise.
+It does show you *exactly what it would take* to serve a local model —
+see the serve plan below. Process control is a planned feature behind the
+`lifecycle` config option, default `off`.
 
 ## The three tabs
 
@@ -30,7 +33,11 @@ as down instead of erroring.
 
 **Models [2]** — everything on disk: the HuggingFace cache (via the library's
 own scanner) plus any extra directories you configure, with sizes and last-used
-dates. Delete with confirmation.
+dates. Delete with confirmation. `s` shows the **serve plan** for the selected
+row: the exact `vllm serve` command plus pre-flight checks — serveability,
+size on disk, vllm binary, port availability, VRAM headroom (via nvidia-smi).
+The preview is read-only: it tells you what would go wrong before you run
+anything yourself.
 
 **Search [3]** — the HuggingFace Hub, filtered for text-generation: real-time
 search, quantization inferred from the repo (AWQ, GPTQ, FP8, INT4/8, GGUF
@@ -61,9 +68,17 @@ cd vllm-cli-tui
 ```json
 {
   "endpoints": ["http://localhost:8000"],
-  "extra_model_dirs": []
+  "extra_model_dirs": [],
+  "lifecycle": "off"
 }
 ```
+
+- `endpoints` — vLLM servers to monitor
+- `extra_model_dirs` — folders (besides the HF cache) where you keep models;
+each subdirectory is listed as one model
+- `lifecycle` — planned process-control mode: `off` (default, observe-only),
+  `systemd` or `direct`. The serve-plan preview does not use it; start/stop
+  arrives in a later release.
 
 - `endpoints` — vLLM servers to monitor
 - `extra_model_dirs` — folders (besides the HF cache) where you keep models;

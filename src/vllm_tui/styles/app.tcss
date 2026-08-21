@@ -30,6 +30,38 @@
     padding: 1 0 0 0;
 }
 
-ConfirmDialog, ModelDetailScreen, DownloadProgressScreen {
+#serve-plan-box {
+    width: 76;
+    height: auto;
+    border: round $accent;
+    background: $panel;
+    padding: 1 2;
+    align: center middle;
+}
+
+#serve-plan-title {
+    text-style: bold;
+}
+
+.serve-plan-ok { color: green; }
+.serve-plan-warn { color: yellow; }
+.serve-plan-fail { color: red; }
+.serve-plan-info { color: $text-muted; }
+
+#serve-plan-gap {
+    height: 1;
+}
+
+#serve-plan-command {
+    text-style: bold;
+    background: $surface;
+}
+
+#serve-plan-hint {
+    color: $text-muted;
+    padding: 1 0 0 0;
+}
+
+ConfirmDialog, ModelDetailScreen, DownloadProgressScreen, ServePlanScreen {
     align: center middle;
 }

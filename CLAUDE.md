@@ -11,7 +11,11 @@ structure cloned from its sibling ollama-cli-tui. Dependencies: `textual`,
 machine-specific defaults (localhost and the standard HF cache only).
 
 **Scope guard:** the tool never starts or stops vLLM processes — lifecycle
-belongs to the host's own tooling. Search/download/observe only.
+belongs to the host's own tooling. Search/download/observe only. The serve
+plan (`s` in Models, `lifecycle.py`) is read-only step 1 of the lifecycle
+roadmap: it shows the command and pre-flight checks, runs nothing. Process
+control will land behind the `lifecycle` config (default `off`) — see
+docs/DESIGN.md → "Lifecycle roadmap".
 
 ## Development Commands
 
@@ -31,9 +35,12 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_hf_client.py -k quant -v   
   search that starts with "q" quits the app)
 - **widgets/** — one view per tab (MonitorView, ModelsView, SearchView)
 - **screens/** — modal dialogs (ConfirmDialog, ModelDetailScreen,
-  DownloadProgressScreen), all returning results via `dismiss()`
-- **hf_client.py / metrics_client.py / local_models.py / config.py / downloads.py**
-  — the pure layer: data in / data out, no Textual imports, unit-tested
+  DownloadProgressScreen, ServePlanScreen), all returning results via `dismiss()`
+- **hf_client.py / metrics_client.py / local_models.py / config.py / downloads.py /
+  lifecycle.py** — the pure layer: data in / data out, no Textual imports,
+  unit-tested. `lifecycle.py` builds the read-only serve plan: all side effects
+  (endpoint parse, port probe, VRAM probe) are passed in, so `build_serve_plan`
+  itself stays deterministic
 
 ### Conventions
 

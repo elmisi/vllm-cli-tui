@@ -48,6 +48,28 @@ what would go wrong, then stops there.
   not worth reinventing. Token comes from the standard HF locations (env var or
   `huggingface-cli login`); the tool never stores it.
 
+#### Known gaps (field notes, Aug 2026)
+
+- **Text search misses the official repos.** A Hub query for `Qwen3.8` returned
+  dozens of third-party GGUF/MLX/abliterated repos but not `Qwen/Qwen3.8-27B`
+  or `Qwen/Qwen3.8-27B-FP8` — the two most downloaded ones. Only an
+  `author=Qwen` filter surfaced them. The `search` param is a loose match on
+  the repo id, not a ranking by relevance or downloads. Candidate fix: when the
+  query looks like a model family (`<Org>… ` or a known vendor name), issue a
+  second request filtered by `author` and merge the results before the
+  client-side sort.
+- **Draft models are not serveable on their own.** Speculative-decoding heads
+  such as `RadixArk/Qwen3.8-27B-DSpark` (architecture `DSparkDraftModel`)
+  currently show as `? DSparkDraftModel`, i.e. "unknown architecture". They are
+  a certain no as a standalone `vllm serve` target: worth a `no (draft model)`
+  rule in `hit_verdict()` keyed on architecture names ending in `DraftModel` /
+  `Eagle*` heads.
+- **What the Monitor tab cannot show.** The speculative-decoding acceptance
+  rate is the number that explains most tok/s variance on a single machine
+  (the same config swings 8→30 tok/s with the content being generated); it is
+  only in the server log lines (`SpecDecoding metrics`), not in `/metrics`.
+  Nothing to do until vLLM exports it as a gauge.
+
 ### 2. Models — what is on disk
 
 - The HuggingFace cache, listed via `huggingface_hub.scan_cache_dir()`: repo id,
